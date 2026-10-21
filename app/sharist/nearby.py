@@ -3,7 +3,7 @@
 # Ablauf: ConnectionRequest → UKEY2 (P-256) → ConnectionResponse → ab da AES-256-CBC + HMAC (SecureMessage) →
 # PairedKey-Rituale → Introduction (Dateiliste) → Zustimmung → Datei-Häppchen.
 # Keine GTK-Abhängigkeit: Rückmeldungen gehen an ein Listener-Objekt (aus Threads – die UI muss selbst umleiten).
-import base64, hashlib, hmac, os, random, re, socket, string, struct, sys, threading, time
+import base64, hashlib, hmac, os, queue, random, re, socket, string, struct, sys, threading, time
 
 from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -35,6 +35,10 @@ class ShareError(Exception):
 
 
 # ---------------- kleine Helfer ----------------
+def log(msg):
+    print(time.strftime("%X"), "sharist:", msg, file=sys.stderr, flush=True)
+
+
 def b64u(data):
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -57,10 +61,10 @@ def new_endpoint_id():
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(4)).encode()
 
 
-def endpoint_info(name, device_type=3):
+def endpoint_info(name, device_type=3, identity=None):
     """1 Byte Typ/Sichtbarkeit, 16 Zufallsbytes, Name mit Längenbyte."""
     raw = name.encode()[:255]
-    return bytes([device_type << 1]) + os.urandom(16) + bytes([len(raw)]) + raw
+    return bytes([device_type << 1]) + (identity or os.urandom(16)) + bytes([len(raw)]) + raw
 
 
 def parse_endpoint_info(data):
@@ -157,8 +161,9 @@ class QrKey:
 
     def __init__(self):
         self.priv = ec.generate_private_key(ec.SECP256R1())
-        x = self.priv.public_key().public_numbers().x.to_bytes(32, "big")
-        self.data = b"\x00\x00\x02" + x
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        # 2 Bytes Version + komprimierter Punkt (02/03 je nach y-Parität + x)
+        self.data = b"\x00\x00" + self.priv.public_key().public_bytes(Encoding.X962, PublicFormat.CompressedPoint)
         self.token = hkdf(self.data, b"", b"advertisingContext", 16)
         self.name_key = hkdf(self.data, b"", b"encryptionKey", 16)
         self.url = "https://quickshare.google/qrcode#key=" + b64u(self.data)
@@ -235,6 +240,7 @@ class Connection(threading.Thread):
         self.auth_key = None
         self.t = Transfer(self, self.SERVER)
         self.last_rx = time.time()
+        self.first = None        # schon gelesener erster Rahmen
 
     # --- Rahmen ---
     def _recv_exact(self, n):
@@ -247,6 +253,9 @@ class Connection(threading.Thread):
         return bytes(buf)
 
     def recv_frame(self):
+        if self.first is not None:
+            data, self.first = self.first, None
+            return data
         (n,) = struct.unpack(">I", self._recv_exact(4))
         if n > MAX_FRAME:
             raise ShareError("rahmen zu groß")
@@ -411,7 +420,9 @@ class Connection(threading.Thread):
                         paired_key_result=wire.PairedKeyResultFrame(status=wire.PairedKeyResultFrame.UNABLE))
 
     def handle_secure(self, raw):
-        f = self.open_secure(raw)
+        self.dispatch(self.open_secure(raw))
+
+    def dispatch(self, f):
         t = f.v1.type
         if t == off.V1Frame.PAYLOAD_TRANSFER:
             pt = f.v1.payload_transfer
@@ -435,6 +446,8 @@ class Connection(threading.Thread):
         elif t == off.V1Frame.DISCONNECTION:
             self.on_disconnect()
             self.close()
+        elif t == off.V1Frame.BANDWIDTH_UPGRADE_NEGOTIATION:
+            log(f"upgrade-rahmen außer der reihe: {f.v1.bandwidth_upgrade_negotiation.event_type}")
 
     def on_bytes(self, pid, data):
         return False
@@ -505,7 +518,9 @@ class Inbound(Connection):
         if f.v1.type != off.V1Frame.CONNECTION_REQUEST:
             raise ShareError("unerwarteter anfang")
         name, dtype, _ = parse_endpoint_info(f.v1.connection_request.endpoint_info)
+        self.peer_eid = f.v1.connection_request.endpoint_id
         self.t.peer = name or f.v1.connection_request.endpoint_name or "unbekannt"
+        log(f"eingehend von {self.t.peer} ({self.peer_eid}) über {self.t.address}")
         self.t.peer_type = dtype
         # 2) UKEY2 ClientInit → ServerInit
         raw = self.recv_frame()
@@ -541,9 +556,95 @@ class Inbound(Connection):
         self.paired_key_encryption()
         self.stage = "pke"
         self.changed()
+        if getattr(self.sock, "is_ble", False):
+            try:
+                self.upgrade_wifi()
+            except (ShareError, ConnectionError):
+                raise
+            except Exception as e:
+                log(f"wlan-upgrade fehlgeschlagen, bleibe bei bluetooth: {e!r}")
         self.sock.settimeout(None)
         while not self.closed:
             self.handle_secure(self.recv_frame())
+
+    # --- Bluetooth → WLAN (Bandwidth-Upgrade) ---
+    @staticmethod
+    def bwu(event, **fields):
+        b = off.BandwidthUpgradeNegotiationFrame(event_type=event, **fields)
+        return Connection.offline(off.V1Frame.BANDWIDTH_UPGRADE_NEGOTIATION, bandwidth_upgrade_negotiation=b)
+
+    def upgrade_wifi(self):
+        B = off.BandwidthUpgradeNegotiationFrame
+        ips = self.engine.local_ips()
+        port = self.engine.server.getsockname()[1] if self.engine.server else None
+        if not ips or not port:
+            log("kein wlan – übertragung bleibt bei bluetooth")
+            return
+        q = queue.Queue()
+        self.engine.bwu_wait[self.peer_eid] = q
+        try:
+            info = B.UpgradePathInfo(medium=B.UpgradePathInfo.WIFI_LAN, supports_client_introduction_ack=True)
+            info.wifi_lan_socket.ip_address = ips[0]
+            info.wifi_lan_socket.wifi_port = port
+            self.send_offline(self.bwu(B.UPGRADE_PATH_AVAILABLE, upgrade_path_info=info))
+            log(f"biete wlan an: {socket.inet_ntoa(ips[0])}:{port}")
+            end = time.time() + 30
+            tcp = None
+            while time.time() < end and not self.closed:
+                try:
+                    tcp, _first = q.get(timeout=0.2)
+                    break
+                except queue.Empty:
+                    pass
+                if self.sock.pending():
+                    f = self.open_secure(self.recv_frame())
+                    if f.v1.type == off.V1Frame.BANDWIDTH_UPGRADE_NEGOTIATION:
+                        ev = f.v1.bandwidth_upgrade_negotiation.event_type
+                        if ev == B.UPGRADE_FAILURE:
+                            log("handy meldet upgrade-fehler – bleibe bei bluetooth")
+                            return
+                        log(f"upgrade-ereignis {ev} beim warten")
+                    else:
+                        self.dispatch(f)
+        finally:
+            self.engine.bwu_wait.pop(self.peer_eid, None)
+        if not tcp:
+            log("handy kam nicht übers wlan – bleibe bei bluetooth")
+            return
+        tcp.settimeout(10)
+        ack = self.bwu(B.CLIENT_INTRODUCTION_ACK, client_introduction_ack=B.ClientIntroductionAck()).SerializeToString()
+        tcp.sendall(struct.pack(">I", len(ack)) + ack)
+        # alten Kanal leeren: LAST_WRITE ↔ SAFE_TO_CLOSE
+        self.send_offline(self.bwu(B.LAST_WRITE_TO_PRIOR_CHANNEL))
+        self.sock.settimeout(5)
+        for _ in range(16):
+            try:
+                f = self.open_secure(self.recv_frame())
+            except (socket.timeout, TimeoutError):
+                break
+            if f.v1.type != off.V1Frame.BANDWIDTH_UPGRADE_NEGOTIATION:
+                self.dispatch(f)
+                continue
+            ev = f.v1.bandwidth_upgrade_negotiation.event_type
+            if ev == B.LAST_WRITE_TO_PRIOR_CHANNEL:
+                self.send_offline(self.bwu(B.SAFE_TO_CLOSE_PRIOR_CHANNEL))
+            elif ev == B.SAFE_TO_CLOSE_PRIOR_CHANNEL:
+                break
+        # Klartext-DISCONNECTION auf Bluetooth, dann Socket tauschen (Schlüssel + Zähler bleiben)
+        d = self.offline(off.V1Frame.DISCONNECTION, disconnection=off.DisconnectionFrame(
+            request_safe_to_disconnect=False, ack_safe_to_disconnect=False))
+        try:
+            self.send_frame(d.SerializeToString())
+        except Exception:
+            pass
+        time.sleep(0.2)
+        with self.send_lock:
+            old, self.sock = self.sock, tcp
+        tcp.settimeout(None)
+        tcp.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.t.address = tcp.getpeername()[0]
+        log(f"auf wlan gewechselt ({self.t.address})")
+        old.kill()
 
     def on_share(self, frame):
         v = frame.v1
@@ -726,6 +827,7 @@ class Outbound(Connection):
 
     def main(self):
         self.set_state("verbinde")
+        log(f"verbinde mit {self.device.name} {self.device.address}:{self.device.port} qr={'ja' if self.qr else 'nein'}")
         self.sock = socket.create_connection((self.device.address, self.device.port), timeout=15)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         if self.cancelled:
@@ -984,6 +1086,12 @@ class Engine:
         self.qr = None
         self.ble = BleNudge()
         self.transfers = []
+        self.identity = os.urandom(16)     # gleich in mDNS und BLE, sonst zeigt das Handy uns doppelt
+        self.blerx = None
+        self.bwu_wait = {}                 # endpunkt-id des Handys → Queue für den WLAN-Socket
+
+    def endpoint_info(self):
+        return endpoint_info(self.name(), identity=self.identity)
 
     def emit(self, what, obj=None):
         try:
@@ -1019,10 +1127,61 @@ class Engine:
             except OSError:
                 break
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            c = Inbound(self, sock)
-            c.t.address = addr[0]
-            self.transfers.append(c.t)
-            c.start()
+            threading.Thread(target=self._route, args=(sock, addr), daemon=True).start()
+
+    def _route(self, sock, addr):
+        """Ersten Rahmen lesen: WLAN-Teil eines Bluetooth-Upgrades → an die wartende Sitzung, sonst neu."""
+        try:
+            sock.settimeout(20)
+            hdr = b""
+            while len(hdr) < 4:
+                c = sock.recv(4 - len(hdr))
+                if not c:
+                    raise ConnectionError("leer")
+                hdr += c
+            (n,) = struct.unpack(">I", hdr)
+            if n > MAX_FRAME:
+                raise ShareError("rahmen zu groß")
+            raw = b""
+            while len(raw) < n:
+                c = sock.recv(n - len(raw))
+                if not c:
+                    raise ConnectionError("leer")
+                raw += c
+        except Exception as e:
+            log(f"verbindung von {addr[0]} ohne anfang: {e!r}")
+            sock.close()
+            return
+        try:
+            f = off.OfflineFrame.FromString(raw)
+            B = off.BandwidthUpgradeNegotiationFrame
+            if f.v1.type == off.V1Frame.BANDWIDTH_UPGRADE_NEGOTIATION and \
+                    f.v1.bandwidth_upgrade_negotiation.event_type == B.CLIENT_INTRODUCTION:
+                eid = f.v1.bandwidth_upgrade_negotiation.client_introduction.endpoint_id
+                q = self.bwu_wait.get(eid)
+                log(f"wlan-upgrade von {eid} ({addr[0]}){'' if q else ' – keine wartende sitzung'}")
+                if q:
+                    q.put((sock, raw))
+                else:
+                    sock.close()
+                return
+        except Exception:
+            pass
+        sock.settimeout(None)
+        c = Inbound(self, sock)
+        c.first = raw
+        c.t.address = addr[0]
+        self.transfers.append(c.t)
+        c.start()
+
+    def inbound_ble(self, wsock):
+        """Vom BLE-Empfänger: neue eingehende Verbindung über den Weave-Socket."""
+        wsock.is_ble = True
+        c = Inbound(self, wsock)
+        c.t.address = "bluetooth"
+        self.transfers.append(c.t)
+        c.start()
+        return c
 
     def local_ips(self):
         ips = set()
@@ -1044,11 +1203,19 @@ class Engine:
             except Exception:
                 pass
             self.info = None
+        if self.blerx:
+            self.blerx.stop()
         if not on:
             return None
         port = self.start_server()
+        try:
+            import blerx
+            self.blerx = self.blerx or blerx.BleReceiver(self)
+            self.blerx.start()
+        except Exception as e:
+            log(f"bluetooth-empfang nicht gestartet: {e!r}")
         self.info = ServiceInfo(SERVICE, f"{service_name(self.endpoint_id)}.{SERVICE}", port=port,
-                                properties={"n": b64u(endpoint_info(self.name()))},
+                                properties={"n": b64u(self.endpoint_info())},
                                 addresses=self.local_ips() or None, server=f"sharist-{self.endpoint_id.decode()}.local.")
         zc.register_service(self.info, allow_name_change=True)
         return port
@@ -1115,6 +1282,8 @@ class Engine:
         if self.qr:
             hit, qname = self.qr.matches(qr)
             dname = dname or qname
+        log(f"gefunden {eid} {info.parsed_addresses()} name={dname!r} typ={dtype} qr={'ja' if qr else 'nein'}"
+            f"{' passt' if hit else (' passt-nicht' if qr and self.qr else '')}")
         if not dname:
             return
         addr = socket.inet_ntoa(info.addresses[0])
@@ -1138,6 +1307,8 @@ class Engine:
 
     def shutdown(self):
         self.ble.stop()
+        if self.blerx:
+            self.blerx.stop()
         try:
             if self.browser:
                 self.browser.cancel()

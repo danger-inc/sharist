@@ -1,5 +1,12 @@
 # sharist – Änderungen
 
+## 1.1.0 (2026-10-21)
+- **Neuere Pixels finden den Laptop**: Sie suchen beim Teilen nur noch per Bluetooth. sharist kündigt sich jetzt
+  zusätzlich per Bluetooth an und nimmt dort Verbindungen an; die Datei selbst wechselt danach aufs WLAN
+  (ohne WLAN läuft sie langsam über Bluetooth weiter).
+- **qr-code repariert**: Der Schlüssel im Code war bei etwa jedem zweiten Code falsch. Wird das Handy erkannt, bevor
+  etwas gewählt ist, merkt sich sharist es und schickt los, sobald eine Datei gewählt wird.
+
 ## 1.0.0 (2026-10-21)
 - **Quick Share für den Laptop**: Android-Handys sehen den Laptop unter „Teilen → Quick Share“ und schicken Dateien,
   Fotos, Text, Links und WLAN-Zugänge. Eine Anfrage zeigt Gerät, Inhalt und **PIN** – annehmen oder ablehnen im

@@ -167,6 +167,7 @@ class Sharist(Gtk.Application):
         self.selection = []      # Pfade zum Senden
         self.engine = None
         self.qr_on = False
+        self.qr_dev = None      # per qr gefundenes handy, wartet auf auswahl
         self.port = None
 
     # ================= Start =================
@@ -391,6 +392,8 @@ class Sharist(Gtk.Application):
                 added += 1
         if self.win:
             self.refresh_selection()
+            if added and getattr(self, "qr_dev", None):
+                self.qr_send(self.qr_dev)
         return added
 
     def clear_selection(self):
@@ -471,13 +474,22 @@ class Sharist(Gtk.Application):
             self.engine.start_discovery(qr=self.qr_on)
         elif not want and self.engine.browser:
             self.engine.stop_discovery()
+            self.qr_dev = None
             if self.qr_on:
                 self.qr_on = False
                 self.refresh_qr()
         if self.win:
             self.refresh_devices()
 
+    def qr_send(self, dev):
+        self.qr_dev = None
+        self.send_to(dev)
+        self.qr_on = False
+        self.engine.qr = None
+        self.refresh_qr()
+
     def toggle_qr(self):
+        self.qr_dev = None
         self.qr_on = not self.qr_on
         if self.qr_on:
             self.engine.qr = nearby.QrKey()
@@ -552,11 +564,13 @@ class Sharist(Gtk.Application):
         if what == "devices":
             self.refresh_devices()
         elif what == "qr-match":
+            nearby.log(f"qr-treffer {obj.name}: fenster={'ja' if self.win else 'nein'} auswahl={self.selection} "
+                       f"text={bool(self.win and self.text_entry.get_text().strip())}")
             if self.win and self.has_selection():
-                self.send_to(obj)
-                self.qr_on = False
-                self.engine.qr = None
-                self.refresh_qr()
+                self.qr_send(obj)
+            elif self.win:      # noch nichts gewählt: Handy merken, Senden startet beim Auswählen
+                self.qr_dev = obj
+                self.win.say(f"qr erkannt: {obj.name} – jetzt datei wählen, dann geht es los")
         elif what == "incoming":
             self.incoming(obj)
         elif what in ("changed", "ended"):
