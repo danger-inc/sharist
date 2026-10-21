@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=sharist
+GenericName=Quick Share
+Comment=Dateien, Text und Links mit Android-Handys teilen (Quick Share)
+Exec=@EXEC@ %F
+Icon=sharist
+Terminal=false
+Categories=Network;FileTransfer;
+Keywords=quick share;nearby share;teilen;android;handy;senden;empfangen;airdrop;
+StartupWMClass=de.invincible.Sharist

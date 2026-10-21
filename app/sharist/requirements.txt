@@ -1,0 +1,4 @@
+zeroconf>=0.130
+protobuf>=7.36.1
+qrcode>=7.4
+cryptography>=41
