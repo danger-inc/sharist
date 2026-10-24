@@ -1,54 +1,54 @@
 # sharist
 
-Quick Share (früher Nearby Share) für Linux im Terminal-Look der Suite (GTK4): Android-Handys schicken dem Laptop
-Dateien, Fotos, Text, Links und WLAN-Zugänge – und der Laptop schickt zurück. Alles direkt über das WLAN,
-verschlüsselt, ohne Google-Konto und ohne Cloud.
+quick share (formerly nearby share) for linux in the terminal look of the suite (gtk4): android phones send the
+laptop files, photos, text, links and wifi credentials – and the laptop sends back. all directly over wifi,
+encrypted, no google account, no cloud.
 
-## Installieren – Linux
+## install – linux
 
 ```bash
-gh auth login                                   # einmalig (Repo ist privat, Einladung nötig)
+gh auth login                                   # login once (repository is private, invitation needed)
 gh repo clone invincible-nix/sharist ~/sharist-src
 cd ~/sharist-src && ./install.sh
 ```
 
-Der Installer fragt nach den Systempaketen (GTK4, PyGObject, Bluetooth – einmal Passwort), kopiert sharist nach
-`~/.local/share/sharist`, richtet dort eine kleine Python-Umgebung ein (zeroconf, protobuf, qrcode) und legt den
-Befehl `sharist` und einen Menüeintrag an. Läuft eine Firewall (ufw/firewalld), bietet er an, **Port 37521/tcp**
-zu öffnen – ohne den kommen Handys nicht durch. Zum Schluss: Autostart im Hintergrund, damit Handys den Laptop
-auch bei geschlossenem Fenster sehen.
+the installer asks for the system packages (gtk4, pygobject, bluetooth – password once), copies sharist to
+`~/.local/share/sharist`, sets up a small python environment there (zeroconf, protobuf, qrcode) and creates
+the command `sharist` and a menu entry. if a firewall is running (ufw/firewalld) it offers to open
+**port 37521/tcp** – phones can't get through without it. last it asks about autostart in the background, so phones
+see the laptop even with the window closed.
 
-## Bedienung
+## usage
 
-- **¹ senden** – Dateien ins Fenster ziehen, Strg+O, Strg+V oder `sharist datei…`; Text/Link ins Feld tippen.
-  Handys in der Nähe tauchen von selbst auf, ein Klick schickt los. Am Handy erscheint die Anfrage mit PIN.
-  Findet sharist das Handy nicht: **qr-code zeigen** und mit der Handy-Kamera scannen – dann verbindet es sich
-  selbst und das Handy fragt nicht mehr nach.
-- **² empfangen** – am Handy „Teilen → Quick Share → *dein Gerätename*“. sharist zeigt Gerät, Inhalt und PIN,
-  annehmen/ablehnen im Fenster oder direkt in der Benachrichtigung. Dateien landen in `~/Downloads`
-  (änderbar), Text gleich in der Zwischenablage, Links lassen sich aus der Benachrichtigung öffnen.
-- Schließen versteckt nur das Fenster; `sharist --toggle` eignet sich für ein Tastenkürzel,
-  `sharist --daemon` für den Autostart, `sharist --quit` beendet.
+* **¹ senden** – drag files into the window, ctrl+o, ctrl+v or `sharist file…`; type text/links into the field.
+nearby phones show up by themselves, one click sends. the phone shows the request with a pin.
+if sharist doesn't find the phone: **qr-code zeigen** and scan it with the phone camera – the phone then
+connects by itself and doesn't ask again.
+* **² empfangen** – on the phone "share → quick share → *your device name*". sharist shows device, content and pin,
+accept/decline in the window or right in the notification. files land in `~/Downloads`
+(changeable), text goes straight to the clipboard, links can be opened from the notification.
+* closing only hides the window; `sharist --toggle` suits a keybinding,
+`sharist --daemon` the autostart, `sharist --quit` exits.
 
-## Damit das Handy den Laptop findet
+## so the phone finds the laptop
 
-- gleiches WLAN, am Handy Bluetooth an
-- Quick Share am Handy: Sichtbarkeit **„Alle“** (oder „Alle für 10 Minuten“)
-- Gastnetze/Uni-WLANs (eduroam) blocken Geräte untereinander oft – dann Handy-Hotspot nehmen
+* same wifi, bluetooth on on the phone
+* quick share on the phone: visibility **"everyone"** (or "everyone for 10 minutes")
+* guest networks / campus wifi (eduroam) often block devices from talking to each other – use a phone hotspot then
 
-## Läuft auf
+## runs on
 
-| System | Status |
-|---|---|
-| Arch (Hyprland) | getestet |
-| Ubuntu 24.04+, Fedora 40+, openSUSE | sollte gehen |
+| system | status |
+| --- | --- |
+| arch (hyprland) | tested |
+| ubuntu 24.04+, fedora 40+, openSUSE | should work |
 
-Senden ans Handy braucht Bluetooth (BlueZ), damit Android seine Quick-Share-Werbung startet; ohne Bluetooth
-bleibt der QR-Code. Das Protokoll folgt der Beschreibung von [NearDrop](https://github.com/grishka/NearDrop).
+sending to the phone needs bluetooth (bluez) so android starts its quick share advertising; without bluetooth
+the qr code remains. the protocol follows the description of [neardrop](https://github.com/grishka/NearDrop).
 
-## Aktualisieren / Entfernen
+## update / remove
 
 ```bash
-./update.sh      # holt den neuen Stand und installiert ihn
-./uninstall.sh   # entfernt sharist (empfangene Dateien und ~/.config/sharist bleiben)
+./update.sh      # fetches the new version and installs it
+./uninstall.sh   # removes sharist (received files and ~/.config/sharist stay)
 ```
