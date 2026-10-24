@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+[ "${1:-}" = --quit ] || { [ -x "$HOME/.local/bin/linguist" ] && "$HOME/.local/bin/linguist" --daemon >/dev/null 2>&1 & }   # linguist (Übersetzer) läuft immer mit
 # Starter für sharist (Quick Share). Läuft es schon im Hintergrund, geht der Aufruf direkt per D-Bus hin.
 #   sharist  ·  sharist --toggle (Super+D)  ·  sharist datei…  (zum Senden)  ·  sharist --daemon  ·  sharist --quit
 APP=de.invincible.Sharist
