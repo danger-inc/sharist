@@ -1,4 +1,19 @@
+<!-- gh-header -->
+<div align="center">
+
+<img src="sharist.svg" width="88" alt="sharist">
+
 # sharist
+
+**quick share for linux**
+
+<img src="https://img.shields.io/badge/GTK-4-4A86CF?style=flat-square&logo=gtk&logoColor=white" alt="GTK"> <img src="https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="python"> <img src="https://img.shields.io/badge/platform-linux-2E7D6B?style=flat-square&logo=linux&logoColor=white" alt="platform"> <img src="https://img.shields.io/badge/made%20for-wayland%20·%20hyprland-7C6BC4?style=flat-square" alt="made for">
+
+</div>
+
+<p align="center"><img src="docs/sharist.png" width="860" alt="sharist screenshot"></p>
+
+<p align="center"><!-- gh-note --><sub>tip: the glass button (󰃝, top right) makes the window see-through, like the terminal – needs a compositor with blur, e.g. hyprland.</sub></p>
 
 quick share (formerly nearby share) for linux in the terminal look of the suite (gtk4): android phones send the
 laptop files, photos, text, links and wifi credentials – and the laptop sends back. all directly over wifi,
@@ -52,3 +67,22 @@ the qr code remains. the protocol follows the description of [neardrop](https://
 ./update.sh      # fetches the new version and installs it
 ./uninstall.sh   # removes sharist (received files and ~/.config/sharist stay)
 ```
+
+<!-- gh-suite -->
+## the -ist suite
+
+all apps share one look (terminal style, colors from your wallpaper via matugen), one installer and the same shortcuts.
+
+| app | what it does |
+| --- | --- |
+| [scourge](https://github.com/danger-inc/scourge-public) | inspect, edit, record, cut – and installs the others |
+| [notist](https://github.com/danger-inc/notist-public) | notes · words · latex |
+| [filist](https://github.com/danger-inc/filist-public) | file explorer + file dialog |
+| [datist](https://github.com/danger-inc/datist) | calendar |
+| [mailist](https://github.com/danger-inc/mailist-public) | mail |
+| [musicalist](https://github.com/danger-inc/musicalist-public) | youtube music |
+| [linguist](https://github.com/danger-inc/linguist) | translator + hover corner |
+| [wallist](https://github.com/danger-inc/wallist) | wallpapers |
+| [inquirist](https://github.com/danger-inc/inquirist) | launcher |
+
+dotfiles with the matching hyprland setup: [danger-inc/dotfiles](https://github.com/danger-inc/dotfiles)
