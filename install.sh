@@ -36,7 +36,7 @@ cp -f "$SRC"/app/sharist/*.py "$SRC"/app/sharist/VERSION "$SRC"/app/sharist/CHAN
 cp -f "$SRC"/app/sharist/pb/*.py "$DIR/pb/"
 cp -f "$SRC"/app/sharist/proto/*.proto "$DIR/proto/"
 install -m 755 "$SRC/sharist.sh" "$DIR/sharist.sh"
-cp -f "$SRC/app/tui.py" "$SRC/app/glass.py" "$SRC/app/changelog.py" "$SRC/app/swipe.py" "$RICE/"   # gemeinsame Bausteine
+cp -f "$SRC/app/tui.py" "$SRC/app/glass.py" "$SRC/app/istheme.py" "$SRC/app/changelog.py" "$SRC/app/swipe.py" "$RICE/"   # gemeinsame Bausteine
 cp -f "$SRC"/app/fonts/* "$RICE/fonts/"                           # Symbolschrift (Icons ohne Nerd Font)
 ln -sf "$DIR/sharist.sh" "$BIN/sharist"
 sed "s|@EXEC@|$BIN/sharist|g" "$SRC/sharist.desktop.in" > "$APPS/sharist.desktop"

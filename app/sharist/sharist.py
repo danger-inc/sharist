@@ -314,6 +314,7 @@ class Sharist(Gtk.Application):
         self.port_lbl = tui.label("", "dim", wrap=True)
         p.body.append(self.port_lbl)
         page.append(p)
+        page.append(tui.theme_panel())
         self.in_panel = tui.Panel("empfangen")
         self.in_list = tui.vbox(spacing=0)
         self.in_empty = tui.label("noch nichts – am handy „teilen“ → quick share → dieses gerät", "empty")
