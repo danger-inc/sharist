@@ -23,7 +23,7 @@ encrypted, no google account, no cloud.
 
 ```bash
 gh auth login                                   # login once (repository is private, invitation needed)
-gh repo clone invincible-nix/sharist ~/sharist-src
+gh repo clone danger-inc/sharist ~/sharist-src
 cd ~/sharist-src && ./install.sh
 ```
 
