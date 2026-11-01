@@ -91,11 +91,11 @@ def full_advert(endpoint_id, einfo, token):
 
 
 def advert_header(full):
-    """15-Byte-Kopf (passt in klassische Werbung): Version 2, „voll auch erweitert“, 1 Slot, Bloom, Hash."""
+    """17-Byte-Kopf (passt in klassische Werbung): Version 2, „voll auch erweitert“, 1 Slot, Bloom, Hash."""
     dummy = os.urandom(128)
     h = hashlib.sha256(dummy).digest()[:4]
     h = hashlib.sha256(h + full).digest()[:4]
-    return bytes([(2 << 5) | 0x10 | 1]) + bloom([dummy, SERVICE_ID]) + h
+    return bytes([(2 << 5) | 0x10 | 1]) + bloom([dummy, SERVICE_ID]) + h + b"\x00\x00"   # PSM 0 (neuere Handys erwarten die 2 Bytes)
 
 
 # ---------------- WeaveSocket: socket-artig für nearby.Connection ----------------
